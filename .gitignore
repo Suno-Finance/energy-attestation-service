@@ -11,3 +11,4 @@ context
 /energy-attestation-sdk-js
 # CI test report
 junit.xml
+.DS_Store
