@@ -1,0 +1,69 @@
+specVersion: 1.0.0
+indexerHints:
+  prune: auto
+schema:
+  file: schema.graphql
+dataSources:
+  - kind: ethereum
+    name: EnergyRegistry
+    network: polygon-amoy
+    source:
+      address: "0xeD6fe3145c1a390114ebEeD03d24963D92c197B5"
+      abi: EnergyRegistry
+      startBlock: 35715153
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Protocol
+        - Resolver
+        - EnergyType
+        - Watcher
+        - WatcherOwnershipTransfer
+        - Project
+        - EnergyAttestation
+        - ProjectAttester
+        - WatcherAttester
+        - DailyEnergySnapshot
+      abis:
+        - name: EnergyRegistry
+          file: EnergyRegistry/EnergyRegistry.json
+      eventHandlers:
+        - event: ResolverAuthorized(indexed address)
+          handler: handleResolverAuthorized
+        - event: ResolverDeauthorized(indexed address)
+          handler: handleResolverDeauthorized
+        - event: EnergyTypeRegistered(indexed uint8,string)
+          handler: handleEnergyTypeRegistered
+        - event: EnergyTypeRemoved(indexed uint8,string)
+          handler: handleEnergyTypeRemoved
+        - event: EnergyTypeAdminTransferred(indexed address,indexed address)
+          handler: handleEnergyTypeAdminTransferred
+        - event: WatcherRegistered(indexed uint64,string,indexed address)
+          handler: handleWatcherRegistered
+        - event: WatcherOwnershipTransferred(indexed uint64,indexed address,indexed address)
+          handler: handleWatcherOwnershipTransferred
+        - event: ProjectRegistered(indexed uint64,indexed uint64,string,uint8)
+          handler: handleProjectRegistered
+        - event: ProjectDeregistered(indexed uint64)
+          handler: handleProjectDeregistered
+        - event: ProjectTransferred(indexed uint64,indexed uint64,indexed uint64)
+          handler: handleProjectTransferred
+        - event: ProjectMetadataURISet(indexed uint64,string)
+          handler: handleProjectMetadataURISet
+        - event: AttesterAdded(indexed uint64,indexed address)
+          handler: handleAttesterAdded
+        - event: AttesterRemoved(indexed uint64,indexed address)
+          handler: handleAttesterRemoved
+        - event: WatcherAttesterAdded(indexed uint64,indexed address)
+          handler: handleWatcherAttesterAdded
+        - event: WatcherAttesterRemoved(indexed uint64,indexed address)
+          handler: handleWatcherAttesterRemoved
+        - event: EnergyAttested(indexed uint64,indexed bytes32,uint64,uint64,uint256,indexed
+            address,uint8,string,uint256[])
+          handler: handleEnergyAttested
+        - event: EnergyReplaced(indexed uint64,indexed
+            bytes32,bytes32,uint64,uint64,uint256,uint256,indexed address,string)
+          handler: handleEnergyReplaced
+      file: EnergyRegistry/EnergyRegistry.wasm

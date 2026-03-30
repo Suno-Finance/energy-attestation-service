@@ -1,0 +1,115 @@
+type Protocol @entity(immutable: false) {
+  id: ID!                          # singleton: "protocol"
+  totalWatchers: Int!
+  totalProjects: Int!
+  totalAttestations: Int!
+  totalGeneratedWh: BigInt!
+  totalConsumedWh: BigInt!
+  energyTypeAdmin: Bytes!
+}
+
+type Resolver @entity(immutable: false) {
+  id: ID!                          # resolver address
+  authorized: Boolean!
+  authorizedAt: BigInt!
+  authorizedAtBlock: BigInt!
+  deauthorizedAt: BigInt
+  deauthorizedAtBlock: BigInt
+}
+
+type EnergyType @entity(immutable: false) {
+  id: ID!                          # energyType uint8 as string
+  name: String!
+  registered: Boolean!
+  projects: [Project!]! @derivedFrom(field: "energyType")
+  totalGeneratedWh: BigInt!
+}
+
+type Watcher @entity(immutable: false) {
+  id: ID!                          # watcherId as string
+  name: String!
+  owner: Bytes!
+  registered: Boolean!
+  projects: [Project!]! @derivedFrom(field: "watcher")
+  watcherAttesters: [WatcherAttester!]! @derivedFrom(field: "watcher")
+  ownershipHistory: [WatcherOwnershipTransfer!]! @derivedFrom(field: "watcher")
+  totalGeneratedWh: BigInt!
+  totalConsumedWh: BigInt!
+  projectCount: Int!
+  createdAt: BigInt!
+  createdAtBlock: BigInt!
+}
+
+type WatcherOwnershipTransfer @entity(immutable: true) {
+  id: ID!                          # txHash-logIndex
+  watcher: Watcher!
+  previousOwner: Bytes!
+  newOwner: Bytes!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  txHash: Bytes!
+}
+
+type Project @entity(immutable: false) {
+  id: ID!                          # projectId as string
+  watcher: Watcher!
+  name: String!
+  energyType: EnergyType
+  registered: Boolean!
+  totalGeneratedWh: BigInt!
+  totalConsumedWh: BigInt!
+  lastToTimestamp: BigInt!
+  metadataURI: String
+  attestations: [EnergyAttestation!]! @derivedFrom(field: "project")
+  attesters: [ProjectAttester!]! @derivedFrom(field: "project")
+  attestationCount: Int!
+  createdAt: BigInt!
+  createdAtBlock: BigInt!
+}
+
+type EnergyAttestation @entity(immutable: false) {
+  id: ID!                          # EAS uid (bytes32 hex)
+  project: Project!
+  fromTimestamp: BigInt!
+  toTimestamp: BigInt!
+  energyWh: BigInt!
+  attester: Bytes!
+  energyType: EnergyType
+  metadataURI: String
+  readings: [BigInt!]!
+  replaced: Boolean!
+  replacedBy: EnergyAttestation
+  replaces: EnergyAttestation
+  blockTimestamp: BigInt!
+  blockNumber: BigInt!
+  txHash: Bytes!
+}
+
+type ProjectAttester @entity(immutable: false) {
+  id: ID!                          # projectId-address
+  project: Project!
+  attester: Bytes!
+  active: Boolean!
+  addedAt: BigInt!
+  addedAtBlock: BigInt!
+}
+
+type WatcherAttester @entity(immutable: false) {
+  id: ID!                          # watcherId-address
+  watcher: Watcher!
+  attester: Bytes!
+  active: Boolean!
+  addedAt: BigInt!
+  addedAtBlock: BigInt!
+}
+
+# Daily snapshot per project for time-series charts
+type DailyEnergySnapshot @entity(immutable: false) {
+  id: ID!                          # projectId-YYYY-MM-DD
+  project: Project!
+  date: String!
+  timestamp: BigInt!
+  generatedWh: BigInt!
+  consumedWh: BigInt!
+  attestationCount: Int!
+}
