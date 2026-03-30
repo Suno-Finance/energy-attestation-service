@@ -1,0 +1,13 @@
+node_modules
+.env
+coverage
+coverage.json
+typechain-types
+types
+cache
+artifacts
+deployments
+context
+/energy-attestation-sdk-js
+# CI test report
+junit.xml
