@@ -146,7 +146,8 @@ contract EnergyAttestationResolver is SchemaResolver, Ownable2Step, Pausable {
         uint64 fromTimestamp,
         uint64 newToTimestamp,
         uint256 newEnergyWh,
-        string memory metadataURI
+        string memory metadataURI,
+        uint256[] memory newReadings
     ) private {
         Attestation memory oldAttestation = _eas.getAttestation(attestation.refUID);
 
@@ -162,7 +163,7 @@ contract EnergyAttestationResolver is SchemaResolver, Ownable2Step, Pausable {
 
         _REGISTRY.recordReplacement(
             attestation.refUID, attestation.uid, projectId, fromTimestamp, newToTimestamp,
-            _computeEnergyWh(oldReadings), newEnergyWh, attestation.attester, metadataURI
+            _computeEnergyWh(oldReadings), newEnergyWh, attestation.attester, metadataURI, newReadings
         );
     }
 
@@ -193,7 +194,7 @@ contract EnergyAttestationResolver is SchemaResolver, Ownable2Step, Pausable {
         if (newToTimestamp <= fromTimestamp) revert InvalidTimestamps();
 
         if (attestation.refUID != bytes32(0)) {
-            _handleReplacement(attestation, projectId, fromTimestamp, newToTimestamp, newEnergyWh, metadataURI);
+            _handleReplacement(attestation, projectId, fromTimestamp, newToTimestamp, newEnergyWh, metadataURI, readings);
         } else {
             _REGISTRY.recordAttestation(
                 attestation.uid, projectId, fromTimestamp, newToTimestamp,
@@ -208,10 +209,13 @@ contract EnergyAttestationResolver is SchemaResolver, Ownable2Step, Pausable {
     ///         blocked to preserve the sequential attestation chain. Use the replacement mechanism
     ///         (submit a new attestation with refUID pointing to the old one) instead.
     function onRevoke(
-        Attestation calldata /*attestation*/,
+        Attestation calldata attestation,
         uint256 /*value*/
-    ) internal pure override returns (bool) {
-        revert DirectRevocationBlocked();
+    ) internal view override returns (bool) {
+        if (_REGISTRY.getReplacementUID(attestation.uid) == bytes32(0)) {
+            revert DirectRevocationBlocked();
+        }
+        return true;
     }
 
 }

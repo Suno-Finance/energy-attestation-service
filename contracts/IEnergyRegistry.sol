@@ -47,7 +47,8 @@ interface IEnergyRegistry {
         uint256 oldEnergyWh,
         uint256 newEnergyWh,
         address attester,
-        string calldata metadataURI
+        string calldata metadataURI,
+        uint256[] calldata newReadings
     ) external;
 
     // ──────────────────────────────────────────────
@@ -72,4 +73,7 @@ interface IEnergyRegistry {
 
     /// @notice Returns the UID that occupies a period start, or bytes32(0) if free.
     function getAttestedPeriodStartUID(uint64 projectId, uint64 fromTimestamp) external view returns (bytes32);
+
+    /// @notice Returns the UID that replaced a given attestation, or bytes32(0) if not replaced.
+    function getReplacementUID(bytes32 uid) external view returns (bytes32);
 }

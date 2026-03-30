@@ -130,7 +130,8 @@ contract EnergyRegistry is IEnergyRegistry, Ownable2Step {
         uint256 oldEnergyWh,
         uint256 newEnergyWh,
         address indexed attester,
-        string metadataURI
+        string metadataURI,
+        uint256[] newReadings
     );
     /// @notice Emitted whenever a project's metadata URI is set or updated.
     ///         Follows the EIP-4906 pattern so indexers can refresh cached metadata.
@@ -559,7 +560,8 @@ contract EnergyRegistry is IEnergyRegistry, Ownable2Step {
         uint256 oldEnergyWh,
         uint256 newEnergyWh,
         address attester,
-        string calldata metadataURI
+        string calldata metadataURI,
+        uint256[] calldata newReadings
     ) external onlyAuthorizedResolver {
         // Prevent replacing an already-replaced attestation (check first for clearer error)
         if (_replacedBy[oldUid] != bytes32(0)) {
@@ -589,7 +591,7 @@ contract EnergyRegistry is IEnergyRegistry, Ownable2Step {
             _totalConsumedWhByWatcher[watcherId] = _totalConsumedWhByWatcher[watcherId] - oldEnergyWh + newEnergyWh;
         }
 
-        emit EnergyReplaced(projectId, oldUid, newUid, fromTimestamp, toTimestamp, oldEnergyWh, newEnergyWh, attester, metadataURI);
+        emit EnergyReplaced(projectId, oldUid, newUid, fromTimestamp, toTimestamp, oldEnergyWh, newEnergyWh, attester, metadataURI, newReadings);
     }
 
     // ──────────────────────────────────────────────

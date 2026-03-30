@@ -356,6 +356,7 @@ export function handleEnergyReplaced(event: EnergyReplaced): void {
   newAttestation.fromTimestamp = event.params.fromTimestamp;
   newAttestation.toTimestamp = event.params.toTimestamp;
   newAttestation.energyWh = event.params.newEnergyWh;
+  newAttestation.readings = event.params.newReadings;
   newAttestation.attester = event.params.attester;
   newAttestation.metadataURI = event.params.metadataURI.length > 0 ? event.params.metadataURI : null;
   newAttestation.replaced = false;

@@ -258,7 +258,7 @@ To correct a previously submitted attestation, submit a new EAS attestation with
 
 - The replacement must cover the **exact same time period** -- same `fromTimestamp` and same derived `toTimestamp`. Only the readings, method, and metadataURI can change.
 - Any currently-authorized attester for the project can perform the replacement (not restricted to the original attester).
-- The old EAS attestation is **not** revoked at the EAS level -- the registry considers it superseded. Both attestations remain visible on EAS for a full audit trail.
+- After the replacement is recorded, the old EAS attestation **can be revoked** by calling `EAS.revoke()` on it — the resolver allows this only for attestations that have already been replaced. The SDK's `overwriteAttestation()` handles this automatically (two transactions: replace, then revoke). On EAS explorer the old attestation will appear as revoked.
 - Use `getReplacementUID(uid)` to follow the replacement chain: it returns the new UID if the attestation was replaced, or `bytes32(0)` if it is still current.
 
 **Example flow:**
@@ -314,7 +314,9 @@ All adjustments are **atomic** in a single transaction — old value subtracted,
 
 ## No Direct Revocation
 
-`EAS.revoke()` is **blocked** at the resolver level -- any attempt to directly revoke an energy attestation will revert with `DirectRevocationBlocked`. The only way to correct data is the replacement mechanism described above. This preserves sequential chain integrity and ensures the full history is always traceable.
+`EAS.revoke()` is **blocked** at the resolver level for active attestations -- any attempt to directly revoke a current attestation will revert with `DirectRevocationBlocked`. The only way to correct data is the replacement mechanism described above.
+
+**Exception:** once an attestation has been replaced (i.e. `getReplacementUID(uid) != bytes32(0)`), it **can** be revoked on EAS. The SDK's `overwriteAttestation()` does this automatically after recording the replacement, so the old attestation appears as revoked on EAS explorer while the full replacement chain remains traceable via the registry.
 
 ---
 
@@ -689,7 +691,7 @@ All events are emitted by `EnergyRegistry` so they persist across resolver upgra
 | `AttesterAdded(projectId, attester)`                                                                 | `projectId`, `attester`                     |                      | `projectId=0` means watcher-wide scope                        |
 | `AttesterRemoved(projectId, attester)`                                                               | `projectId`, `attester`                     |                      | `projectId=0` means watcher-wide scope                        |
 | `EnergyAttested(projectId, fromTimestamp, toTimestamp, energyWh, attester, energyType, metadataURI)` | `projectId`, `attester`                     | all others           | `energyType` is read from project (0=consumer, 1–N=generator) |
-| `EnergyReplaced(projectId, oldUid, newUid, oldEnergyWh, newEnergyWh, attester, metadataURI)`         | `projectId`, `oldUid`, `newUid`             | all others           | Emitted when an attestation is replaced via `refUID`          |
+| `EnergyReplaced(projectId, oldUid, newUid, oldEnergyWh, newEnergyWh, attester, metadataURI, newReadings)` | `projectId`, `oldUid`, `newUid`        | all others           | Emitted when an attestation is replaced via `refUID`; `newReadings` carries the replacement readings for indexers |
 | `ProjectMetadataURISet(projectId, uri)`                                                              | `projectId`                                 | `uri`                |                                                               |
 | `EnergyTypeRegistered(id, name)`                                                                     | `id`                                        | `name`               |                                                               |
 | `EnergyTypeRemoved(id, name)`                                                                        | `id`                                        | `name`               |                                                               |

@@ -62,6 +62,6 @@ dataSources:
           handler: handleWatcherAttesterRemoved
         - event: EnergyAttested(indexed uint64,indexed bytes32,uint64,uint64,uint256,indexed address,uint8,string,uint256[])
           handler: handleEnergyAttested
-        - event: EnergyReplaced(indexed uint64,indexed bytes32,bytes32,uint64,uint64,uint256,uint256,indexed address,string)
+        - event: EnergyReplaced(indexed uint64,indexed bytes32,bytes32,uint64,uint64,uint256,uint256,indexed address,string,uint256[])
           handler: handleEnergyReplaced
       file: ./src/mapping.ts

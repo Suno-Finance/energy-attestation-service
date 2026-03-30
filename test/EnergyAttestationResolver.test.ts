@@ -2308,7 +2308,20 @@ describe("EnergyAttestationResolver", function () {
           schema: schemaUID,
           data: { recipient: ZeroAddress, expirationTime: NO_EXPIRATION, revocable: true, refUID: uid, data: replacementData, value: 0n },
         })
-      ).to.emit(registry, "EnergyReplaced");
+      ).to.emit(registry, "EnergyReplaced")
+        .withArgs(projectId, uid, anyValue, 1000n, 1060n, 500n, 750n, attester.address, "ipfs://QmCorrected", [750n]);
+    });
+
+    it("Should allow revoking old attestation on EAS after replacement", async function () {
+      const { networkHelpers } = await hre.network.connect();
+      const { eas, schemaUID, attester, projectId } = await networkHelpers.loadFixture(deployFixture);
+      const uid = await attestEnergy(eas, schemaUID, attester, projectId, 1000, 2000, 500n);
+      // Step 1: replace
+      await replaceAttestation(eas, schemaUID, attester, uid, projectId, 1000, [750n], 1, "manual");
+      // Step 2: revoke old UID (now allowed because it has been replaced)
+      await eas.connect(attester).revoke({ schema: schemaUID, data: { uid, value: 0n } });
+      const oldAttestation = await eas.getAttestation(uid);
+      expect(oldAttestation.revocationTime).to.be.gt(0n);
     });
 
     it("Should replace middle-of-chain attestation without affecting chain tip", async function () {
