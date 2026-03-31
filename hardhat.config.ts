@@ -40,6 +40,7 @@ export default defineConfig({
     npmFilesToBuild: [
       "@ethereum-attestation-service/eas-contracts/contracts/EAS.sol",
       "@ethereum-attestation-service/eas-contracts/contracts/SchemaRegistry.sol",
+      "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol",
     ],
   },
   networks: {

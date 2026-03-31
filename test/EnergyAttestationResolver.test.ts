@@ -44,10 +44,17 @@ async function deployFixture(connection: NetworkConnection) {
   const eas = (await EASFactory.deploy(await schemaRegistry.getAddress())) as unknown as EAS;
   await eas.waitForDeployment();
 
-  // Deploy Registry (permanent state contract)
+  // Deploy Registry via UUPS proxy (permanent state contract)
   const RegistryFactory = await ethers.getContractFactory("EnergyRegistry");
-  const registry = (await RegistryFactory.deploy()) as unknown as EnergyRegistry;
-  await registry.waitForDeployment();
+  const registryImpl = await RegistryFactory.deploy();
+  await registryImpl.waitForDeployment();
+
+  const initData = RegistryFactory.interface.encodeFunctionData("initialize", [owner.address]);
+  const ProxyFactory = await ethers.getContractFactory("ERC1967Proxy");
+  const proxy = await ProxyFactory.deploy(await registryImpl.getAddress(), initData);
+  await proxy.waitForDeployment();
+
+  const registry = RegistryFactory.attach(await proxy.getAddress()) as unknown as EnergyRegistry;
 
   // Deploy Resolver (logic contract — points to registry)
   const ResolverFactory = await ethers.getContractFactory("EnergyAttestationResolver");
@@ -207,8 +214,15 @@ describe("EnergyAttestationResolver", function () {
 
     it("Should start with nextProjectId = 1 and nextWatcherId = 1", async function () {
       const { ethers } = await hre.network.connect();
+      const [owner] = await ethers.getSigners();
       const RegistryFactory = await ethers.getContractFactory("EnergyRegistry");
-      const registry = await RegistryFactory.deploy();
+      const registryImpl = await RegistryFactory.deploy();
+      await registryImpl.waitForDeployment();
+      const initData = RegistryFactory.interface.encodeFunctionData("initialize", [owner.address]);
+      const ProxyFactory = await ethers.getContractFactory("ERC1967Proxy");
+      const proxy = await ProxyFactory.deploy(await registryImpl.getAddress(), initData);
+      await proxy.waitForDeployment();
+      const registry = RegistryFactory.attach(await proxy.getAddress()) as unknown as EnergyRegistry;
       expect(await registry.getNextProjectId()).to.equal(1);
       expect(await registry.getNextWatcherId()).to.equal(1);
     });
@@ -2493,6 +2507,72 @@ describe("EnergyAttestationResolver", function () {
           { schema: schemaUID, data: [{ uid, value: 0n }] },
         ])
       ).to.be.revertedWithCustomError(resolver, "DirectRevocationBlocked");
+    });
+  });
+
+  describe("Upgrade access control", function () {
+    it("Owner can upgrade to a new implementation", async function () {
+      const { networkHelpers, ethers } = await hre.network.connect();
+      const { owner, registry } = await networkHelpers.loadFixture(deployFixture);
+
+      // Deploy a new implementation
+      const RegistryFactory = await ethers.getContractFactory("EnergyRegistry");
+      const newImpl = await RegistryFactory.deploy();
+      await newImpl.waitForDeployment();
+
+      const tx = await registry.connect(owner).upgradeToAndCall(await newImpl.getAddress(), "0x");
+      await tx.wait();
+    });
+
+    it("Non-owner cannot upgrade", async function () {
+      const { networkHelpers, ethers } = await hre.network.connect();
+      const { other, registry } = await networkHelpers.loadFixture(deployFixture);
+
+      const RegistryFactory = await ethers.getContractFactory("EnergyRegistry");
+      const newImpl = await RegistryFactory.deploy();
+      await newImpl.waitForDeployment();
+
+      await expect(
+        registry.connect(other).upgradeToAndCall(await newImpl.getAddress(), "0x")
+      ).to.be.revertedWithCustomError(registry, "OwnableUnauthorizedAccount");
+    });
+
+    it("State is preserved after upgrade", async function () {
+      const { networkHelpers, ethers } = await hre.network.connect();
+      const { owner, registry, watcherId } = await networkHelpers.loadFixture(deployFixture);
+
+      const RegistryFactory = await ethers.getContractFactory("EnergyRegistry");
+      const newImpl = await RegistryFactory.deploy();
+      await newImpl.waitForDeployment();
+
+      await registry.connect(owner).upgradeToAndCall(await newImpl.getAddress(), "0x");
+
+      // Watcher registered in fixture should still exist after upgrade
+      const watcher = await registry.getWatcher(watcherId);
+      expect(watcher.registered).to.equal(true);
+      expect(watcher.name).to.equal("Green Energy Co");
+    });
+
+    it("Calling initialize again on the proxy reverts", async function () {
+      const { networkHelpers } = await hre.network.connect();
+      const { owner, registry } = await networkHelpers.loadFixture(deployFixture);
+
+      await expect(
+        registry.connect(owner).initialize(owner.address)
+      ).to.be.revertedWithCustomError(registry, "InvalidInitialization");
+    });
+
+    it("Calling initialize on the bare implementation reverts", async function () {
+      const { networkHelpers, ethers } = await hre.network.connect();
+      const { owner } = await networkHelpers.loadFixture(deployFixture);
+
+      const RegistryFactory = await ethers.getContractFactory("EnergyRegistry");
+      const bareImpl = await RegistryFactory.deploy();
+      await bareImpl.waitForDeployment();
+
+      await expect(
+        (bareImpl as unknown as EnergyRegistry).connect(owner).initialize(owner.address)
+      ).to.be.revertedWithCustomError(bareImpl as unknown as EnergyRegistry, "InvalidInitialization");
     });
   });
 });

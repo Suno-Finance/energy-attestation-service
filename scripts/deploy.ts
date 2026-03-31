@@ -14,13 +14,22 @@ async function main() {
   console.log(`Deployer: ${deployer.address}`);
   console.log(`EAS:      ${easAddress}`);
 
-  // Step 1: Deploy the permanent state contract
-  console.log("\n1. Deploying EnergyRegistry...");
-  const Registry = await ethers.getContractFactory("EnergyRegistry");
-  const registry = await Registry.deploy();
-  await registry.waitForDeployment();
-  const registryAddress = await registry.getAddress();
-  console.log(`   EnergyRegistry deployed to: ${registryAddress}`);
+  // Step 1: Deploy EnergyRegistry implementation + ERC1967 proxy
+  console.log("\n1. Deploying EnergyRegistry (UUPS proxy)...");
+  const RegistryImpl = await ethers.getContractFactory("EnergyRegistry");
+  const registryImpl = await RegistryImpl.deploy();
+  await registryImpl.waitForDeployment();
+  const registryImplAddress = await registryImpl.getAddress();
+  console.log(`   EnergyRegistry implementation: ${registryImplAddress}`);
+
+  const initData = RegistryImpl.interface.encodeFunctionData("initialize", [deployer.address]);
+  const ProxyFactory = await ethers.getContractFactory("ERC1967Proxy");
+  const proxy = await ProxyFactory.deploy(registryImplAddress, initData);
+  await proxy.waitForDeployment();
+  const registryAddress = await proxy.getAddress();
+  console.log(`   EnergyRegistry proxy (use this address): ${registryAddress}`);
+
+  const registry = RegistryImpl.attach(registryAddress);
 
   // Step 2: Deploy the resolver, pointing it at EAS and the registry
   console.log("\n2. Deploying EnergyAttestationResolver...");
@@ -40,6 +49,7 @@ async function main() {
   const deployedAt = new Date().toISOString();
   const deployment = {
     registry: registryAddress,
+    registryImpl: registryImplAddress,
     resolver: resolverAddress,
     deployer: deployer.address,
     eas: easAddress,
@@ -64,10 +74,10 @@ async function main() {
 
   console.log("\n=== Next steps ===");
   console.log(`1. Set in your .env:`);
-  console.log(`     REGISTRY_ADDRESS=${registryAddress}`);
+  console.log(`     REGISTRY_ADDRESS=${registryAddress}   # proxy — use this everywhere`);
   console.log(`     RESOLVER_ADDRESS=${resolverAddress}`);
   console.log(`2. Verify contracts:`);
-  console.log(`     npm run verify:${networkName} -- ${registryAddress}`);
+  console.log(`     npm run verify:${networkName} -- ${registryImplAddress}   # implementation`);
   console.log(`     npm run verify:${networkName} -- ${resolverAddress} ${easAddress} ${registryAddress}`);
   console.log(`3. Register schema:`);
   console.log(`     npx hardhat run scripts/register-schema.ts --network ${networkName}`);

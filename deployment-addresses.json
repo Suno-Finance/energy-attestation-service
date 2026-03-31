@@ -1,11 +1,12 @@
 {
   "amoy": {
-    "registry": "0xeD6fe3145c1a390114ebEeD03d24963D92c197B5",
-    "resolver": "0x724B49E52E9E6B78324E8aF38A8DF56e32745b72",
+    "registry": "0x059D4655941204cf6aaC1cF578Aa9dc5D3ed6B39",
+    "registryImpl": "0x1e951f46F74cce1fA0b14ca0FbDB039d944469fB",
+    "resolver": "0x7DF77a7EA812c731Df67559D0277CCdF7A9eEbc3",
     "deployer": "0x8713fDa9330B0326ee209e680Bd1feF8DA8519f9",
-    "schemaUID": "0x826d8672ade4ea0c0c2d7133e3095f010faa3b3dca331641835adbc7ac4384ce",
+    "schemaUID": "0x4673141c77c3d54962edf6ef7f25a0c62656f9bd08138b4c4f9561413c235435",
     "eas": "0xb101275a60d8bfb14529C421899aD7CA1Ae5B5Fc",
-    "deployedAt": "2026-03-26T20:44:17.254Z"
+    "deployedAt": "2026-03-31T00:23:37.659Z"
   },
   "celo": {
     "registry": "0x644Dd384FCF5d94da98Bf8F6F10C448426974d29",

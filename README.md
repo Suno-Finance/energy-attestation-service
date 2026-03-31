@@ -28,7 +28,7 @@ With the goal of becoming an open standard for on-chain energy reporting.
   - [Events Reference](#events-reference)
   - [Custom Errors Reference](#custom-errors-reference)
   - [Common Error Scenarios](#common-error-scenarios)
-  - [Resolver Upgrade & Migration](#resolver-upgrade--migration)
+  - [Upgrade & Migration Guide](#upgrade--migration-guide)
   - [Supported Networks](#supported-networks)
 - **Subgraph**
   - [Subgraph](#subgraph)
@@ -40,7 +40,6 @@ With the goal of becoming an open standard for on-chain energy reporting.
   - [Using an existing deployment (watchers & testers)](#using-an-existing-deployment-watchers--testers)
   - [Linting](#linting)
   - [Running Tests](#running-tests)
-  - [CI Merge Gate (GitLab)](#ci-merge-gate-gitlab)
 - **Security**
   - [Security: Watcher Ownership](#security-watcher-ownership)
   - [Security Notes](#security-notes)
@@ -571,34 +570,74 @@ The contract treats `watcher.owner` as a plain address — it calls `msg.sender 
 
 ## Contract Architecture
 
-The system is split into two contracts with a clear separation of concerns:
+The system is built around a permanent state layer and a replaceable logic layer, each with a distinct upgrade mechanism.
 
-### `EnergyRegistry.sol` — Permanent State
+---
 
-The registry is deployed **once per network and never replaced**. It holds all watcher, project, attester, and energy data. All events are emitted here so historical data can always be indexed from a single address, regardless of how many resolver versions have been deployed.
+### System overview
 
-When a resolver is upgraded, the registry and all its data remain intact. Watchers do not need to re-register anything.
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              USERS / SDK                                    │
+│              (watchers, IoT devices, project operators)                     │
+└───────────────────────────┬─────────────────────────────────────────────────┘
+                            │  EAS.attest() / EAS.revoke()
+                            ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                    EAS (Ethereum Attestation Service)                     │
+│                    — immutable, deployed by EAS team —                    │
+│                                                                           │
+│  Stores attestations on-chain. On every attest/revoke calls the          │
+│  resolver's onAttest() / onRevoke() hook before accepting the tx.        │
+└───────────────────────────────────┬───────────────────────────────────────┘
+                                    │  onAttest() / onRevoke()  (hook)
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│              EnergyAttestationResolver   (replaceable logic)              │
+│              — deployed once per schema version —                         │
+│                                                                           │
+│  • Validates: attester authorized, project active, data format valid      │
+│  • Stateless: only stores the registry address (immutable)                │
+│  • Can be paused by owner to block new attestations                       │
+└────────┬──────────────────────────────────────────────────────────────────┘
+         │  read: isProjectRegistered(), isProjectAttester(), getProjectType()
+         │  write: recordAttestation(), recordReplacement()
+         ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│        EnergyRegistry PROXY   ◄── permanent address, never changes       │
+│        ─────────────────────────────────────────────────────────────      │
+│        EnergyRegistry IMPL    ◄── swappable via UUPS upgrade             │
+│                                                                           │
+│  • Owns all state: watchers, projects, attesters, energy accumulators     │
+│  • Emits all events from one address → subgraph never needs repointing   │
+│  • Multiple resolvers can be authorized simultaneously (migration window) │
+│  • Upgradeable via UUPS: impl can change, proxy address is permanent      │
+└───────────────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                          The Graph Subgraph                               │
+│              indexes EnergyRegistry events at the proxy address           │
+└───────────────────────────────────────────────────────────────────────────┘
+```
 
-**Ownership:** contract owner (deployer). Only the owner can authorize/deauthorize resolvers.
+---
+
+### `EnergyRegistry.sol` — Permanent State (UUPS proxy)
+
+Deployed **once per network**. Holds all watcher, project, attester, and energy data. Because all events are emitted here, the subgraph always indexes from the same address regardless of how many resolver or registry versions have been deployed.
+
+Deployed as a **UUPS upgradeable proxy** (EIP-1967): the proxy address never changes; the implementation behind it can be upgraded to fix bugs or add features while preserving all on-chain state.
+
+**Ownership:** contract owner. Only the owner can authorize/deauthorize resolvers and upgrade the implementation.
 
 ### `EnergyAttestationResolver.sol` — Replaceable Logic
 
-The resolver is the EAS hook. EAS calls it on every attest/revoke. It validates the attestation (project registered, attester authorized, data valid) and delegates all state reads/writes to the registry.
+The EAS hook contract. EAS calls it on every `attest`/`revoke`. It validates the data (project registered, attester authorized, data well-formed) and delegates all state reads/writes to the registry.
 
-The resolver is **stateless** except for the registry address (immutable). It can be replaced without migrating any data. Multiple versions can run simultaneously during a migration window.
+The resolver is **stateless** except for the immutable registry address. It can be replaced without migrating any data. Multiple versions can run simultaneously during a migration window.
 
-**Ownership:** contract owner (deployer). Only the owner can pause/unpause.
-
-### How they interact
-
-```
-User → EAS.attest() → EnergyAttestationResolver.onAttest()
-                             │
-                             ├── registry.isProjectRegistered()
-                             ├── registry.isProjectAttester() / isWatcherAttester()
-                             ├── registry.getProjectType()  ← determines generator vs consumer
-                             └── registry.recordAttestation()  ← writes state + emits event
-```
+**Ownership:** contract owner. Only the owner can pause/unpause.
 
 ---
 
@@ -771,32 +810,181 @@ Quick reference for developers encountering failures:
 
 ---
 
-## Resolver Upgrade & Migration
+## Upgrade & Migration Guide
 
-**Reference** (needed only when upgrading contract logic)
+There are three types of protocol changes, each with a different scope, cost, and impact:
 
-When a bug is found or new logic is needed:
+| Type | What changes | Subgraph update | Watchers re-register | State lost |
+|---|---|---|---|---|
+| **Energy type** | runtime call, no deploy | No | No | No |
+| **Resolver upgrade** | new resolver contract + new schema | No | Schema UID only | No |
+| **Registry upgrade** | new registry implementation (UUPS) | No | No | No |
 
-### What the deployer does
+---
 
-1. Deploy a new `EnergyAttestationResolver(eas, registryAddress)`
-2. Call `registry.authorizeResolver(newResolverAddress)` — both resolvers are now active
-3. Register a new schema on EAS pointing to the new resolver address — this gives you a new `schemaUID`
-4. Notify watchers of the new schema UID
+### Type 1 — Add a new energy generation type (no upgrade needed)
 
-### What watchers do (the only migration cost)
+Energy types (solar, wind, hydro, etc.) are stored in the registry at runtime. Adding a new type is a single on-chain call — no contract deployment, no subgraph change, no watcher action needed.
 
-Watchers update their attesting software/scripts to use the **new schema UID**. Their watcher ID, project IDs, attester whitelists, and energy totals are unchanged — they stay in the registry. Only the schema UID in their attestation submissions needs to change.
+```
+owner wallet
+    │
+    └─► registry.registerEnergyType(14, "offshore_solar")
+                    │
+                    └─► writes to _energyTypeNames[14] and _energyTypeRegistered[14]
+                        emits EnergyTypeRegistered(14, "offshore_solar")
+```
 
-### Ending the migration window
+**When to use:** new energy source needs to be tracked. The `uint8` key supports IDs 0–255 (0 is reserved as consumer sentinel; 1–13 pre-registered at deploy time; 14–255 available).
 
-Once all watchers have migrated:
+---
 
-1. Call `oldResolver.pause()` — new attestations and replacements via the old schema are now blocked
-2. Call `registry.deauthorizeResolver(oldResolverAddress)` — removes write access
-3. Old schema UID is effectively retired
+### Type 2 — Resolver upgrade (new validation logic or schema change)
 
-During the migration window, Watcher A can migrate immediately while Watcher B takes a few more days — both schemas work at the same time.
+Use this when attestation validation logic needs to change (new field, new rule, bug fix in the hook), or when the EAS schema definition itself changes. Each resolver version is tied to exactly one schema UID on EAS.
+
+**No state is ever migrated.** All watchers, projects, attesters, and energy totals stay in the registry unchanged. Only the schema UID used when submitting attestations changes.
+
+#### During the migration window (both resolvers active)
+
+```
+┌─────────────┐           ┌─────────────────────────────────────┐
+│    Users    │           │                 EAS                  │
+│ (watchers)  │           │                                      │
+└──────┬──────┘           └──────────┬──────────────────────────┘
+       │                             │
+       │  attest with old schemaUID  │  onAttest()
+       ├────────────────────────────►│ ─────────────────────────► ResolverV1 ──► Registry
+       │                             │                            (authorized)
+       │  attest with new schemaUID  │  onAttest()
+       └────────────────────────────►│ ─────────────────────────► ResolverV2 ──► Registry
+                                     │                            (authorized)
+```
+
+Both resolvers write to the same registry. All attestations go to the same state, emit the same events, and appear in the same subgraph — regardless of which resolver version processed them.
+
+#### Step-by-step: deployer actions
+
+```
+1. Deploy new EnergyAttestationResolver(easAddress, registryProxyAddress)
+        │
+        └─► resolverV2Address
+
+2. registry.authorizeResolver(resolverV2Address)
+        │
+        └─► both V1 and V2 are now active simultaneously
+
+3. eas.schemaRegistry.register(newSchema, resolverV2Address, revocable)
+        │
+        └─► newSchemaUID  ← share this with all watchers
+
+4. Notify watchers: update your SDK/scripts to use newSchemaUID
+```
+
+#### Step-by-step: watcher actions
+
+```
+SDK config before:  { schemaUID: "0xOLD..." }
+SDK config after:   { schemaUID: "0xNEW..." }
+```
+
+That is the only change watchers make. Watcher IDs, project IDs, attester whitelists, and all accumulated energy totals carry over automatically.
+
+#### Ending the migration window (once all watchers have migrated)
+
+```
+1. resolverV1.pause()
+        │
+        └─► blocks new attestations through V1 schema (reverts onAttest)
+
+2. registry.deauthorizeResolver(resolverV1Address)
+        │
+        └─► removes V1 write access to the registry
+
+3. old schemaUID is retired — existing attestations under it remain on EAS forever
+```
+
+**When to use:** changing attestation validation rules, adding new schema fields, fixing a bug in `onAttest`/`onRevoke`, or any change to the EAS schema string.
+
+---
+
+### Type 3 — Registry upgrade (UUPS)
+
+Use this only when the registry's own storage or logic needs to change — new data structures, new on-chain aggregation, bug in registry state management. The **proxy address never changes**, so the subgraph data source, all resolver contracts, and all SDK configs require zero updates.
+
+```
+                    BEFORE                              AFTER
+
+EAS ──► ResolverV2 ──► [Proxy: 0xABCD]      EAS ──► ResolverV2 ──► [Proxy: 0xABCD]
+                             │                                            │
+                        [Impl V1]                                    [Impl V2]
+                        (old code)                                   (new code)
+                                                                  same storage ✓
+                                                              same proxy address ✓
+```
+
+#### Step-by-step: deployer actions
+
+```
+1. Write and audit RegistryV2.sol
+        │
+        └─► must inherit from RegistryV1 layout:
+            - never reorder or remove existing state variables
+            - append new variables BEFORE __gap
+            - reduce __gap by N for each N new uint256-equivalent variable added
+
+2. Deploy bare RegistryV2 implementation (initialize() is blocked by _disableInitializers)
+        │
+        └─► implV2Address
+
+3. registry.upgradeToAndCall(implV2Address, "0x")   ← called from owner wallet
+        │
+        ├─► proxy now delegates to implV2
+        ├─► all storage (watchers, projects, energy totals) is untouched
+        └─► subgraph continues indexing from the same proxy address, no reindex needed
+
+4. Verify: registry.getNextWatcherId() still returns expected value
+           registry.getWatcher(1) still returns correct data
+```
+
+#### Storage safety rules (mandatory)
+
+```
+// V1 state variables (DO NOT TOUCH):
+mapping(address => bool) private _authorizedResolvers;   // slot 2
+mapping(uint64 => Watcher) private _watchers;            // slot 3
+uint64 private _nextWatcherId;                           // slot 4
+// ... (slots 5–21) ...
+address private _energyTypeAdmin;                        // slot 21
+uint256[50] private __gap;                               // slots 22–71
+
+// V2: adding 2 new variables → reduce gap from 50 to 48
+address private _energyTypeAdmin;                        // slot 21  ← unchanged
+address private _newFeatureAddress;                      // slot 22  ← new variable
+uint256 private _newFeatureConfig;                       // slot 23  ← new variable
+uint256[48] private __gap;                               // slots 24–71  ← 50 - 2 = 48
+```
+
+Rule: **consumed slots + remaining gap must always equal 50.**
+
+**When to use:** adding new on-chain aggregation fields, changing registry data structures, fixing a state-management bug in `recordAttestation`/`recordReplacement`. Do not use for attestation validation changes — that is a resolver upgrade.
+
+---
+
+### What each upgrade affects
+
+```
+                     Energy type    Resolver upgrade    Registry upgrade
+                     (runtime call) (new deploy)        (UUPS)
+─────────────────────────────────────────────────────────────────────────
+Proxy address          unchanged      unchanged           unchanged
+Registry state         unchanged      unchanged           unchanged
+Subgraph reindex       no             no                  no
+Watchers re-register   no             no                  no
+Watchers update SDK    no             schemaUID only       no
+EAS schema             unchanged      new schema + UID     unchanged
+Resolver address       unchanged      new address          unchanged
+```
 
 ---
 
@@ -904,7 +1092,7 @@ npm run deploy:amoy      # deploy to The Graph Studio
 | ---------------------- | -------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------- |
 | Celo Mainnet           | `0x644Dd384FCF5d94da98Bf8F6F10C448426974d29` | `0xB6Cefe51DA3bC7cfCEa9D3d7440348a7ac91e14c` | `0xbca196f2a002d6c29cddd85eb41637d2804d50c5c37faae85c15b375253844ef` |
 | Polygon Mainnet        | `0x644Dd384FCF5d94da98Bf8F6F10C448426974d29` | `0xB6Cefe51DA3bC7cfCEa9D3d7440348a7ac91e14c` | `0xbca196f2a002d6c29cddd85eb41637d2804d50c5c37faae85c15b375253844ef` |
-| Polygon Amoy (testnet) | `0xeD6fe3145c1a390114ebEeD03d24963D92c197B5` | `0x724B49E52E9E6B78324E8aF38A8DF56e32745b72` | `0x826d8672ade4ea0c0c2d7133e3095f010faa3b3dca331641835adbc7ac4384ce` |
+| Polygon Amoy (testnet) | `0x059D4655941204cf6aaC1cF578Aa9dc5D3ed6B39` | `0x7DF77a7EA812c731Df67559D0277CCdF7A9eEbc3` | `0x4673141c77c3d54962edf6ef7f25a0c62656f9bd08138b4c4f9561413c235435` |
 
 
 ---
@@ -957,7 +1145,13 @@ npx hardhat compile
 npx hardhat run scripts/deploy.ts --network amoy
 ```
 
-This deploys `EnergyRegistry` and `EnergyAttestationResolver`, authorizes the resolver on the registry, and saves everything to `deployments/amoy.json`. Copy the printed addresses into `REGISTRY_ADDRESS` and `RESOLVER_ADDRESS` in your `.env`.
+This deploys the `EnergyRegistry` implementation + `ERC1967Proxy` (calling `initialize` in the same transaction), then deploys `EnergyAttestationResolver` and authorizes it on the registry. Everything is saved to `deployments/amoy.json`.
+
+The script prints two registry addresses:
+- **implementation** — the bare logic contract (needed for Etherscan verification only)
+- **proxy** — the permanent address that everything else uses
+
+Copy the **proxy** address into `REGISTRY_ADDRESS` and the resolver address into `RESOLVER_ADDRESS` in your `.env`.
 
 > **Wallet roles:** On real networks, Hardhat is configured to use:
 >
@@ -1277,39 +1471,6 @@ npx hardhat test
 | `scripts/query-watcher.ts`   | Print a full energy summary for a watcher (totals + per-project breakdown) |
 
 
----
-
-## CI Merge Gate (GitLab)
-
-The repository uses GitLab CI (`.gitlab-ci.yml`) as a quality gate for merges into `main`.
-
-### When it runs
-
-- On every merge request pipeline
-- On direct commits to `main`
-
-### Optimized job order
-
-1. **Verify stage (parallel)**
-  - `lint` runs `npm run lint`
-  - `compile` runs `npx hardhat compile`
-2. **Test stage (after compile)**
-  - `test` runs `npx hardhat test --no-compile`
-
-This is preferred over `lint -> test -> compile` because:
-
-- `lint` and `compile` are independent, so running them in parallel is faster.
-- `hardhat test` compiles by default; forcing `--no-compile` avoids duplicate compilation.
-- The `compile` job publishes `artifacts/` and `cache/` so tests can run against the exact compiled output.
-
-### Merge policy (recommended)
-
-Protect the `main` branch and enable:
-
-- **Pipelines must succeed**
-- **Required maintainer approvals**
-
-With those settings, a merge request to `main` is only mergeable after lint, compile, and tests all pass.
 
 ---
 
