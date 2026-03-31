@@ -1,7 +1,7 @@
 {
   "name": "energy-attestation-service",
-  "version": "0.0.1",
-  "description": "On-chain energy attestation service built on top of EAS",
+  "version": "1.0.0",
+  "description": "On-chain energy data attestation protocol — Solidity smart contracts and deployment scripts for the Energy Attestation Service built on EAS, targeting Celo and Polygon",
   "type": "module",
   "scripts": {
     "compile": "hardhat compile",
@@ -23,12 +23,29 @@
     "eas",
     "attestation",
     "energy",
+    "solidity",
+    "hardhat",
+    "smart-contracts",
     "web3",
-    "sdk",
-    "EVM"
+    "EVM",
+    "celo",
+    "polygon",
+    "uups",
+    "upgradeable"
   ],
   "author": "Suno",
   "license": "MIT",
+  "homepage": "https://attest.energy",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Suno-Finance/energy-attestation-service"
+  },
+  "bugs": {
+    "url": "https://github.com/Suno-Finance/energy-attestation-service/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.3",
