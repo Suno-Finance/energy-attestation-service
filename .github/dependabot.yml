@@ -1,0 +1,26 @@
+version: 2
+
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+    ignore:
+      - dependency-name: "@ethereum-attestation-service/eas-contracts"
+        reason: "Core protocol dependency — major version changes require manual review and contract-level testing"
+      - dependency-name: "@openzeppelin/contracts"
+        reason: "Core protocol dependency — upgrades may affect storage layout and security guarantees, requires manual review"
+    labels:
+      - "dependencies"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
