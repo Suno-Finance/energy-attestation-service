@@ -14,6 +14,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ["node_modules/**", "artifacts/**", "cache/**", "typechain-types/**"],
+    ignores: ["node_modules/**", "artifacts/**", "cache/**", "typechain-types/**", "scripts/verify-args/**"],
   }
 );

@@ -8,9 +8,9 @@ dataSources:
     name: EnergyRegistry
     network: polygon-amoy
     source:
-      address: "0xeD6fe3145c1a390114ebEeD03d24963D92c197B5"
+      address: "0x059D4655941204cf6aaC1cF578Aa9dc5D3ed6B39"
       abi: EnergyRegistry
-      startBlock: 35715153
+      startBlock: 35894534
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9

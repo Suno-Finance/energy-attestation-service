@@ -4,7 +4,7 @@
   "scripts": {
     "codegen": "graph codegen",
     "build": "graph build",
-    "deploy:amoy": "graph deploy --node https://api.studio.thegraph.com/deploy/ --deploy-key $GRAPH_DEPLOY_KEY energy-attestation-service",
+    "deploy:amoy": "graph deploy --node https://api.studio.thegraph.com/deploy/ --deploy-key $GRAPH_DEPLOY_KEY energy-attestation-service-amoy",
     "deploy:polygon": "graph deploy --node https://api.studio.thegraph.com/deploy/ --deploy-key $GRAPH_DEPLOY_KEY energy-attestation-service"
   },
   "dependencies": {
