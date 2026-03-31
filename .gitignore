@@ -12,3 +12,8 @@ context
 # CI test report
 junit.xml
 .DS_Store
+
+# Subgraph generated artifacts
+subgraph/build/
+subgraph/generated/
+subgraph/node_modules/
