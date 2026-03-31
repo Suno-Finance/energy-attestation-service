@@ -1,5 +1,13 @@
 # Energy Attestation Service
 
+[![CI](https://img.shields.io/github/actions/workflow/status/Suno-Finance/energy-attestation-service/ci.yml?label=CI)](https://github.com/Suno-Finance/energy-attestation-service/actions)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Solidity](https://img.shields.io/badge/solidity-0.8.28-blue)](https://docs.soliditylang.org)
+[![Network: Celo](https://img.shields.io/badge/network-Celo-brightgreen)](https://celo.org)
+[![Network: Polygon](https://img.shields.io/badge/network-Polygon-purple)](https://polygon.technology)
+[![Built on EAS](https://img.shields.io/badge/built%20on-EAS-orange)](https://attest.org)
+[![OpenZeppelin](https://img.shields.io/badge/security-OpenZeppelin-blue)](https://openzeppelin.com/contracts/)
+
 An on-chain public good for transparent energy reporting, built on the [Ethereum Attestation Service (EAS)](https://attest.org). Any energy project can attest production or consumption data publicly and permanently on-chain, creating a verifiable record that anyone can audit.
 
 Project site: [attest.energy](https://attest.energy/)
