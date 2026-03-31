@@ -2,6 +2,8 @@
 pragma solidity 0.8.28;
 
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import { UUPSUpgradeable } from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import { IEnergyRegistry } from "./IEnergyRegistry.sol";
 
 /// @title EnergyRegistry
@@ -10,7 +12,7 @@ import { IEnergyRegistry } from "./IEnergyRegistry.sol";
 ///         EnergyAttestationResolver contracts are authorized to write to it.
 ///         When a resolver is upgraded, this contract and all its data remain intact —
 ///         watchers simply update their schema UID to point to the new resolver.
-contract EnergyRegistry is IEnergyRegistry, Ownable2Step {
+contract EnergyRegistry is Initializable, UUPSUpgradeable, IEnergyRegistry, Ownable2Step {
     // ──────────────────────────────────────────────
     //  Types
     // ──────────────────────────────────────────────
@@ -88,6 +90,9 @@ contract EnergyRegistry is IEnergyRegistry, Ownable2Step {
     // Energy type admin — separate from contract owner; can register and remove generation types
     address private _energyTypeAdmin;
 
+    /// @dev Storage gap for future upgrades. Reduce this by N when adding N uint256-equivalent slots.
+    uint256[50] private __gap;
+
     // ──────────────────────────────────────────────
     //  Events
     // ──────────────────────────────────────────────
@@ -130,7 +135,8 @@ contract EnergyRegistry is IEnergyRegistry, Ownable2Step {
         uint256 oldEnergyWh,
         uint256 newEnergyWh,
         address indexed attester,
-        string metadataURI
+        string metadataURI,
+        uint256[] newReadings
     );
     /// @notice Emitted whenever a project's metadata URI is set or updated.
     ///         Follows the EIP-4906 pattern so indexers can refresh cached metadata.
@@ -182,10 +188,18 @@ contract EnergyRegistry is IEnergyRegistry, Ownable2Step {
     //  Constructor
     // ──────────────────────────────────────────────
 
-    constructor() Ownable(msg.sender) {
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() Ownable(address(1)) {
+        _disableInitializers();
+    }
+
+    /// @notice Initialize the proxy. Called once by the ERC1967Proxy deployment transaction.
+    /// @param initialOwner The address that will own the registry (and hold upgrade rights).
+    function initialize(address initialOwner) external initializer {
+        _transferOwnership(initialOwner);
         _nextWatcherId = 1;
         _nextProjectId = 1;
-        _energyTypeAdmin = msg.sender;
+        _energyTypeAdmin = initialOwner;
 
         // Pre-register standard energy generation types.
         // The energy type admin can add new types via registerEnergyType() without redeployment.
@@ -218,6 +232,10 @@ contract EnergyRegistry is IEnergyRegistry, Ownable2Step {
         if (!_watchers[watcherId].registered) revert WatcherNotRegistered(watcherId);
         if (_watchers[watcherId].owner != msg.sender) revert UnauthorizedWatcherOwner(msg.sender, watcherId);
     }
+
+    /// @inheritdoc UUPSUpgradeable
+    // solhint-disable-next-line no-empty-blocks
+    function _authorizeUpgrade(address /*newImplementation*/) internal override onlyOwner {}
 
     // ──────────────────────────────────────────────
     //  Resolver Authorization (contract owner only)
@@ -559,7 +577,8 @@ contract EnergyRegistry is IEnergyRegistry, Ownable2Step {
         uint256 oldEnergyWh,
         uint256 newEnergyWh,
         address attester,
-        string calldata metadataURI
+        string calldata metadataURI,
+        uint256[] calldata newReadings
     ) external onlyAuthorizedResolver {
         // Prevent replacing an already-replaced attestation (check first for clearer error)
         if (_replacedBy[oldUid] != bytes32(0)) {
@@ -589,7 +608,7 @@ contract EnergyRegistry is IEnergyRegistry, Ownable2Step {
             _totalConsumedWhByWatcher[watcherId] = _totalConsumedWhByWatcher[watcherId] - oldEnergyWh + newEnergyWh;
         }
 
-        emit EnergyReplaced(projectId, oldUid, newUid, fromTimestamp, toTimestamp, oldEnergyWh, newEnergyWh, attester, metadataURI);
+        emit EnergyReplaced(projectId, oldUid, newUid, fromTimestamp, toTimestamp, oldEnergyWh, newEnergyWh, attester, metadataURI, newReadings);
     }
 
     // ──────────────────────────────────────────────
