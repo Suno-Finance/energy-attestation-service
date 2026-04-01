@@ -59,7 +59,7 @@ export default defineConfig({
     },
     polygon: {
       type: "http",
-      url: "https://polygon-rpc.com",
+      url: "https://polygon-bor-rpc.publicnode.com",
       chainId: 137,
       accounts: [configVariable("PRIVATE_KEY_DEPLOYER"), configVariable("PRIVATE_KEY_WATCHER")],
     },
