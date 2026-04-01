@@ -9,19 +9,21 @@
     "deployedAt": "2026-03-31T00:23:37.659Z"
   },
   "celo": {
-    "registry": "0x644Dd384FCF5d94da98Bf8F6F10C448426974d29",
-    "resolver": "0xB6Cefe51DA3bC7cfCEa9D3d7440348a7ac91e14c",
+    "registry": "0xA5B5f895091d79d1f099531cDB8cb896F17ec4C1",
+    "registryImpl": "0xaC3781838d7c1304329768E95D4F9FA5BeC18E7B",
+    "resolver": "0x5d2f202cAE2D321C5f595baaE359956c3a9Ff02D",
     "deployer": "0x8713fDa9330B0326ee209e680Bd1feF8DA8519f9",
-    "schemaUID": "0xbca196f2a002d6c29cddd85eb41637d2804d50c5c37faae85c15b375253844ef",
     "eas": "0x72E1d8ccf5299fb36fEfD8CC4394B8ef7e98Af92",
-    "deployedAt": "2026-03-26T22:01:05.167Z"
+    "deployedAt": "2026-04-01T19:33:46.097Z",
+    "schemaUID": "0xb9c136082a935b39c6e276ea137ac489bdc090aac17a116347c7ea90442ef7e0"
   },
   "polygon": {
-    "registry": "0x644Dd384FCF5d94da98Bf8F6F10C448426974d29",
-    "resolver": "0xB6Cefe51DA3bC7cfCEa9D3d7440348a7ac91e14c",
+    "registry": "0xA5B5f895091d79d1f099531cDB8cb896F17ec4C1",
+    "registryImpl": "0xaC3781838d7c1304329768E95D4F9FA5BeC18E7B",
+    "resolver": "0x5d2f202cAE2D321C5f595baaE359956c3a9Ff02D",
     "deployer": "0x8713fDa9330B0326ee209e680Bd1feF8DA8519f9",
-    "schemaUID": "0xbca196f2a002d6c29cddd85eb41637d2804d50c5c37faae85c15b375253844ef",
+    "schemaUID": "0xb9c136082a935b39c6e276ea137ac489bdc090aac17a116347c7ea90442ef7e0",
     "eas": "0x5E634ef5355f45A855d02D66eCD687b1502AF790",
-    "deployedAt": "2026-03-26T22:18:01.770Z"
+    "deployedAt": "2026-04-01T19:24:49.991Z"
   }
 }

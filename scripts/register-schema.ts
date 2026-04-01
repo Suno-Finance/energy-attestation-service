@@ -1,4 +1,6 @@
 import hre from "hardhat";
+import { readFileSync, writeFileSync } from "fs";
+import { resolve } from "path";
 import { getNetworkAddresses } from "./eas-addresses.js";
 
 const SCHEMA =
@@ -39,7 +41,14 @@ async function main() {
       topics: registeredEvent.topics as string[],
       data: registeredEvent.data,
     });
-    console.log(`Schema UID: ${parsed!.args[0]}`);
+    const schemaUID: string = parsed!.args[0];
+    console.log(`Schema UID: ${schemaUID}`);
+
+    const addressesPath = resolve(process.cwd(), "deployment-addresses.json");
+    const addresses = JSON.parse(readFileSync(addressesPath, "utf8"));
+    addresses[networkName] = { ...addresses[networkName], schemaUID };
+    writeFileSync(addressesPath, JSON.stringify(addresses, null, 2) + "\n");
+    console.log(`deployment-addresses.json updated with schemaUID for "${networkName}"`);
   }
 
   console.log(`Schema: ${SCHEMA}`);

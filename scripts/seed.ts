@@ -19,6 +19,7 @@
 
 import hre from "hardhat";
 import { AbiCoder, ZeroAddress, ZeroHash } from "ethers";
+import type { Log } from "ethers";
 import { getNetworkAddresses } from "./eas-addresses.js";
 
 // ─── Seed data ────────────────────────────────────────────────────────────────
@@ -103,7 +104,7 @@ async function main() {
   const watcherTx = await registry.registerWatcher("Suno Energy");
   const watcherReceipt = await watcherTx.wait();
   const watcherEvent = watcherReceipt!.logs
-    .map((log) => { try { return registry.interface.parseLog(log as any); } catch { return null; } })
+    .map((log: Log) => { try { return registry.interface.parseLog(log); } catch { return null; } })
     .find((e) => e?.name === "WatcherRegistered");
   const watcherId: bigint = watcherEvent!.args[0];
   console.log(`   ✓ Watcher ID: ${watcherId}`);
@@ -114,7 +115,7 @@ async function main() {
   const proj1Tx = await registry.registerProject(watcherId, "Solar Farm Alpha", 1); // solar_pv
   const proj1Receipt = await proj1Tx.wait();
   const proj1Event = proj1Receipt!.logs
-    .map((log) => { try { return registry.interface.parseLog(log as any); } catch { return null; } })
+    .map((log: Log) => { try { return registry.interface.parseLog(log); } catch { return null; } })
     .find((e) => e?.name === "ProjectRegistered");
   const project1Id: bigint = proj1Event!.args[0];
   await (await registry.addAttester(project1Id, watcher.address)).wait();
@@ -123,7 +124,7 @@ async function main() {
   const proj2Tx = await registry.registerProject(watcherId, "Wind Farm Beta", 2); // wind_onshore
   const proj2Receipt = await proj2Tx.wait();
   const proj2Event = proj2Receipt!.logs
-    .map((log) => { try { return registry.interface.parseLog(log as any); } catch { return null; } })
+    .map((log: Log) => { try { return registry.interface.parseLog(log); } catch { return null; } })
     .find((e) => e?.name === "ProjectRegistered");
   const project2Id: bigint = proj2Event!.args[0];
   await (await registry.addAttester(project2Id, watcher.address)).wait();
