@@ -1,3 +1,4 @@
+// v0.0.5
 import { BigInt } from "@graphprotocol/graph-ts";
 import {
   ResolverAuthorized,
@@ -315,26 +316,8 @@ export function handleEnergyAttested(event: EnergyAttested): void {
   }
   protocol.save();
 
-  // Update daily snapshot
-  let date = timestampToDateString(event.params.fromTimestamp);
-  let snapshotId = projectId + "-" + date;
-  let snapshot = DailyEnergySnapshot.load(snapshotId);
-  if (snapshot == null) {
-    snapshot = new DailyEnergySnapshot(snapshotId);
-    snapshot.project = projectId;
-    snapshot.date = date;
-    snapshot.timestamp = dayStartTimestamp(event.params.fromTimestamp);
-    snapshot.generatedWh = BigInt.fromI32(0);
-    snapshot.consumedWh = BigInt.fromI32(0);
-    snapshot.attestationCount = 0;
-  }
-  if (isGenerator) {
-    snapshot.generatedWh = snapshot.generatedWh.plus(event.params.energyWh);
-  } else {
-    snapshot.consumedWh = snapshot.consumedWh.plus(event.params.energyWh);
-  }
-  snapshot.attestationCount = snapshot.attestationCount + 1;
-  snapshot.save();
+  // Distribute energy across daily snapshots using actual readings when available
+  distributeDailyEnergy(projectId, event.params.fromTimestamp, event.params.toTimestamp, event.params.energyWh, event.params.readings, isGenerator, true, true);
 }
 
 export function handleEnergyReplaced(event: EnergyReplaced): void {
@@ -356,12 +339,12 @@ export function handleEnergyReplaced(event: EnergyReplaced): void {
   newAttestation.fromTimestamp = event.params.fromTimestamp;
   newAttestation.toTimestamp = event.params.toTimestamp;
   newAttestation.energyWh = event.params.newEnergyWh;
-  newAttestation.readings = event.params.newReadings;
   newAttestation.attester = event.params.attester;
   newAttestation.metadataURI = event.params.metadataURI.length > 0 ? event.params.metadataURI : null;
   newAttestation.replaced = false;
   newAttestation.replacedBy = null;
   newAttestation.replaces = oldUid;
+  newAttestation.readings = [];
   newAttestation.energyType = oldAttestation != null ? oldAttestation.energyType : null;
   newAttestation.blockTimestamp = event.block.timestamp;
   newAttestation.blockNumber = event.block.number;
@@ -407,15 +390,128 @@ export function handleEnergyReplaced(event: EnergyReplaced): void {
   }
   protocol.save();
 
-  // Adjust daily snapshot for the period's day
-  let date = timestampToDateString(event.params.fromTimestamp);
-  let snapshot = DailyEnergySnapshot.load(projectId + "-" + date);
-  if (snapshot != null) {
-    if (isGenerator) {
-      snapshot.generatedWh = snapshot.generatedWh.plus(delta);
-    } else {
-      snapshot.consumedWh = snapshot.consumedWh.plus(delta);
+  // Undo old energy distribution using stored readings, then apply new one uniformly
+  // (new readings are not emitted in EnergyReplaced — fall back to uniform distribution)
+  if (oldAttestation != null) {
+    distributeDailyEnergy(projectId, oldAttestation.fromTimestamp, oldAttestation.toTimestamp, event.params.oldEnergyWh, oldAttestation.readings, isGenerator, false, false);
+  }
+  distributeDailyEnergy(projectId, event.params.fromTimestamp, event.params.toTimestamp, event.params.newEnergyWh, [], isGenerator, true, false);
+}
+
+// ─── Daily snapshot helper ────────────────────────────
+
+// Distributes energy across daily snapshots.
+// If readings[] is non-empty, uses actual per-interval readings (accurate daily values).
+// If readings[] is empty, falls back to uniform distribution across days.
+// add=true accumulates, add=false subtracts (used when undoing a replaced attestation).
+// incrementCount=true bumps attestationCount once per day (only for new attestations).
+function distributeDailyEnergy(
+  projectId: string,
+  fromTimestamp: BigInt,
+  toTimestamp: BigInt,
+  energyWh: BigInt,
+  readings: Array<BigInt>,
+  isGenerator: boolean,
+  add: boolean,
+  incrementCount: boolean
+): void {
+  if (readings.length > 0) {
+    // Use actual readings: derive each reading's timestamp and accumulate into its day
+    let numReadings = BigInt.fromI32(readings.length);
+    let interval    = toTimestamp.minus(fromTimestamp).div(numReadings);
+    let countedDays: Array<string> = [];
+
+    for (let i = 0; i < readings.length; i++) {
+      let readingTimestamp = fromTimestamp.plus(BigInt.fromI32(i).times(interval));
+      let date             = timestampToDateString(readingTimestamp);
+      let snapshotId       = projectId + "-" + date;
+      let snapshot         = DailyEnergySnapshot.load(snapshotId);
+
+      if (snapshot == null) {
+        snapshot = new DailyEnergySnapshot(snapshotId);
+        snapshot.project          = projectId;
+        snapshot.date             = date;
+        snapshot.timestamp        = dayStartTimestamp(readingTimestamp);
+        snapshot.generatedWh      = BigInt.fromI32(0);
+        snapshot.consumedWh       = BigInt.fromI32(0);
+        snapshot.attestationCount = 0;
+      }
+
+      let readingValue = readings[i];
+
+      if (add) {
+        if (isGenerator) {
+          snapshot.generatedWh = snapshot.generatedWh.plus(readingValue);
+        } else {
+          snapshot.consumedWh = snapshot.consumedWh.plus(readingValue);
+        }
+        // Increment attestationCount only once per day per attestation
+        if (incrementCount && !countedDays.includes(date)) {
+          snapshot.attestationCount = snapshot.attestationCount + 1;
+          countedDays.push(date);
+        }
+      } else {
+        if (isGenerator) {
+          snapshot.generatedWh = snapshot.generatedWh.minus(readingValue);
+        } else {
+          snapshot.consumedWh = snapshot.consumedWh.minus(readingValue);
+        }
+      }
+
+      snapshot.save();
     }
-    snapshot.save();
+  } else {
+    // Fallback: distribute energyWh uniformly across each day in [fromTimestamp, toTimestamp]
+    let DAY_SECONDS  = BigInt.fromI32(86400);
+    let fromDay      = dayStartTimestamp(fromTimestamp);
+    let toDay        = dayStartTimestamp(toTimestamp);
+    let numDays      = toDay.minus(fromDay).div(DAY_SECONDS).plus(BigInt.fromI32(1));
+    let energyPerDay = energyWh.div(numDays);
+    let remainder    = energyWh.mod(numDays);
+
+    let currentDay = fromDay;
+    let dayIndex   = BigInt.fromI32(0);
+
+    while (!currentDay.gt(toDay)) {
+      let date       = timestampToDateString(currentDay);
+      let snapshotId = projectId + "-" + date;
+      let snapshot   = DailyEnergySnapshot.load(snapshotId);
+
+      if (snapshot == null) {
+        snapshot = new DailyEnergySnapshot(snapshotId);
+        snapshot.project          = projectId;
+        snapshot.date             = date;
+        snapshot.timestamp        = currentDay;
+        snapshot.generatedWh      = BigInt.fromI32(0);
+        snapshot.consumedWh       = BigInt.fromI32(0);
+        snapshot.attestationCount = 0;
+      }
+
+      // Remainder goes to the last day to preserve total energy exactly
+      let isLastDay    = dayIndex.equals(numDays.minus(BigInt.fromI32(1)));
+      let energyForDay = isLastDay ? energyPerDay.plus(remainder) : energyPerDay;
+
+      if (add) {
+        if (isGenerator) {
+          snapshot.generatedWh = snapshot.generatedWh.plus(energyForDay);
+        } else {
+          snapshot.consumedWh = snapshot.consumedWh.plus(energyForDay);
+        }
+        if (incrementCount) {
+          snapshot.attestationCount = snapshot.attestationCount + 1;
+        }
+      } else {
+        if (isGenerator) {
+          snapshot.generatedWh = snapshot.generatedWh.minus(energyForDay);
+        } else {
+          snapshot.consumedWh = snapshot.consumedWh.minus(energyForDay);
+        }
+      }
+
+      snapshot.save();
+
+      currentDay = currentDay.plus(DAY_SECONDS);
+      dayIndex   = dayIndex.plus(BigInt.fromI32(1));
+    }
   }
 }
