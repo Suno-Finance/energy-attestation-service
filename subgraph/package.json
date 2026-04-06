@@ -5,7 +5,8 @@
     "codegen": "graph codegen",
     "build": "graph build",
     "deploy:amoy": "graph deploy --node https://api.studio.thegraph.com/deploy/ --deploy-key $GRAPH_DEPLOY_KEY energy-attestation-service-amoy",
-    "deploy:polygon": "graph deploy --node https://api.studio.thegraph.com/deploy/ --deploy-key $GRAPH_DEPLOY_KEY energy-attestation-service"
+    "deploy:polygon": "graph deploy --node https://api.studio.thegraph.com/deploy/ --deploy-key $GRAPH_DEPLOY_KEY energy-attestation-service-polygon",
+    "deploy:celo": "graph deploy --node https://api.studio.thegraph.com/deploy/ --deploy-key $GRAPH_DEPLOY_KEY energy-attestation-service-celo"
   },
   "dependencies": {
     "@graphprotocol/graph-ts": "^0.35.0"
